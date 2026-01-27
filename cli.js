@@ -5,22 +5,28 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 const fs = require("fs");
+const os = require("os");
 
 const argv = require("minimist")(process.argv.slice(2));
 const dotenv = require("dotenv");
 const dotenvExpand = require("dotenv-expand").expand;
 
+// Biến lưu danh sách các file tạm cần xóa
+const tempFilesToCleanup = [];
+
 function printHelp() {
   console.log(
     [
-      "Usage: dotenv [--help] [--debug] [--quiet=false] [-e <path>] [-v <name>=<value>] [-p <variable name>] [-c [environment]] [--no-expand] [-- command]",
+      "Usage: dotenvrtdb [--help] [--debug] [--quiet=false] [-e <path>] [-eUrl <url>] [-v <n>=<value>] [-p <variable name>] [-c [environment]] [--no-expand] [-- command]",
       "  --help              print help",
       "  --debug             output the files that would be processed but don't actually parse them or run the `command`",
       "  --quiet, -q         suppress debug output from dotenv (default: true)",
       "  -e <path>           parses the file <path> as a `.env` file and adds the variables to the environment",
       "  -e <path>           multiple -e flags are allowed",
-      "  -v <name>=<value>   put variable <name> into environment using value <value>",
-      "  -v <name>=<value>   multiple -v flags are allowed",
+      "  -eUrl <url>         pull env from remote URL to temp file, use it, then delete temp file",
+      "  -eUrl <url>         multiple -eUrl flags are allowed",
+      "  -v <n>=<value>      put variable <n> into environment using value <value>",
+      "  -v <n>=<value>      multiple -v flags are allowed",
       "  -p <variable>       print value of <variable> to the console. If you specify this, you do not have to specify a `command`",
       "  -c [environment]    support cascading env variables from `.env`, `.env.<environment>`, `.env.local`, `.env.<environment>.local` files",
       "  --no-expand         skip variable expansion",
@@ -28,15 +34,44 @@ function printHelp() {
       "  command             `command` is the actual command you want to run. Best practice is to precede this command with ` -- `. Everything after `--` is considered to be your command. So any flags will not be parsed by this tool but be passed to your command. If you do not do it, this tool will strip those flags",
       "",
       "Remote database commands:",
-      "  --pull <url>        pull env variables from remote realtime database URL and save to file",
+      "  --pull <url>        pull env variables from remote database URL and save to file",
       "                      use with -e flag to specify output file (default: .env)",
-      "                      example: dotenv --pull <url> -e .env.production",
-      "  --push <url>        push local .env file to remote realtime database URL",
+      "                      example: dotenvrtdb --pull <url> -e .env.production",
+      "  --push <url>        push local .env file to remote database URL",
       "                      use with -e flag to specify source file (default: .env)",
-      "                      example: dotenv --push <url> -e .env.staging",
+      "                      example: dotenvrtdb --push <url> -e .env.staging",
     ].join("\n"),
   );
 }
+
+// Hàm cleanup để xóa các file tạm
+function cleanupTempFiles() {
+  const isDebug = argv.debug;
+
+  tempFilesToCleanup.forEach((filePath) => {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        if (isDebug || !(argv.quiet === false || argv.q === false || argv.quiet === "false" || argv.q === "false")) {
+          console.log(`🗑️  Deleted temp file: ${filePath}`);
+        }
+      }
+    } catch (err) {
+      console.error(`⚠️  Failed to delete temp file ${filePath}: ${err.message}`);
+    }
+  });
+}
+
+// Đăng ký cleanup khi process kết thúc
+process.on("exit", cleanupTempFiles);
+process.on("SIGINT", () => {
+  cleanupTempFiles();
+  process.exit(130);
+});
+process.on("SIGTERM", () => {
+  cleanupTempFiles();
+  process.exit(143);
+});
 
 // Hàm mask URL để ẩn auth token
 function maskUrl(url) {
@@ -204,6 +239,36 @@ function parseEnvFile(filePath) {
   }
 }
 
+// Hàm tạo file tạm từ URL
+async function createTempFileFromUrl(url, index = 0) {
+  const isDebug = argv.debug;
+  const timestamp = Date.now();
+  const tempFileName = `.env.temp.${timestamp}.${index}`;
+  const tempFilePath = path.join(os.tmpdir(), tempFileName);
+
+  try {
+    if (isDebug) {
+      console.log(`📥 Pulling from ${maskUrl(url)} to temp file: ${tempFilePath}`);
+    }
+
+    const data = await fetchFromUrl(url);
+    const envContent = objectToEnvFormat(data);
+
+    fs.writeFileSync(tempFilePath, envContent, "utf-8");
+
+    if (isDebug) {
+      console.log(`✓ Created temp file: ${tempFilePath}`);
+    }
+
+    // Thêm vào danh sách cần cleanup
+    tempFilesToCleanup.push(tempFilePath);
+
+    return tempFilePath;
+  } catch (err) {
+    throw new Error(`Failed to create temp file from ${maskUrl(url)}: ${err.message}`);
+  }
+}
+
 // Xử lý lệnh pull
 async function handlePull(url, outputPath) {
   try {
@@ -269,7 +334,7 @@ if (argv.push) {
   return;
 }
 
-// ===== PHẦN CODE GỐC BÊN DƯỚI GIỮ NGUYÊN =====
+// ===== PHẦN CODE GỐC BÊN DƯỚI VỚI BỔ SUNG -eUrl =====
 
 const override = argv.o || argv.override;
 
@@ -281,89 +346,146 @@ if (argv.c && override) {
   process.exit(1);
 }
 
-let paths = [];
-if (argv.e) {
-  if (typeof argv.e === "string") {
-    paths.push(argv.e);
-  } else {
-    paths.push(...argv.e);
+// Xử lý -eUrl: Pull từ URL vào file tạm
+async function processEUrlFlags() {
+  if (!argv.eUrl) {
+    return [];
   }
-} else {
-  paths.push(".env");
+
+  const urls = typeof argv.eUrl === "string" ? [argv.eUrl] : argv.eUrl;
+  const tempPaths = [];
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    try {
+      const tempPath = await createTempFileFromUrl(url, i);
+      tempPaths.push(tempPath);
+    } catch (err) {
+      console.error(`✗ Failed to process -eUrl ${maskUrl(url)}: ${err.message}`);
+      cleanupTempFiles();
+      process.exit(1);
+    }
+  }
+
+  return tempPaths;
 }
 
-if (argv.c) {
-  paths = paths.reduce(
-    (accumulator, path) =>
-      accumulator.concat(
-        typeof argv.c === "string" ? [`${path}.${argv.c}.local`, `${path}.local`, `${path}.${argv.c}`, path] : [`${path}.local`, path],
-      ),
-    [],
-  );
-}
+// Main async function để xử lý -eUrl
+async function main() {
+  let paths = [];
 
-function validateCmdVariable(param) {
-  const [, key, val] = param.match(/^(\w+)=([\s\S]+)$/m) || [];
-  if (!key || !val) {
-    console.error(`Invalid variable name. Expected variable in format '-v variable=value', but got: \`-v ${param}\`.`);
+  // Xử lý -eUrl trước
+  const tempPaths = await processEUrlFlags();
+  paths.push(...tempPaths);
+
+  // Sau đó xử lý -e như bình thường
+  if (argv.e) {
+    if (typeof argv.e === "string") {
+      paths.push(argv.e);
+    } else {
+      paths.push(...argv.e);
+    }
+  }
+
+  // Nếu không có -e và -eUrl, dùng .env mặc định
+  if (paths.length === 0) {
+    paths.push(".env");
+  }
+
+  if (argv.c) {
+    paths = paths.reduce(
+      (accumulator, envPath) =>
+        accumulator.concat(
+          typeof argv.c === "string"
+            ? [`${envPath}.${argv.c}.local`, `${envPath}.local`, `${envPath}.${argv.c}`, envPath]
+            : [`${envPath}.local`, envPath],
+        ),
+      [],
+    );
+  }
+
+  function validateCmdVariable(param) {
+    const [, key, val] = param.match(/^(\w+)=([\s\S]+)$/m) || [];
+    if (!key || !val) {
+      console.error(`Invalid variable name. Expected variable in format '-v variable=value', but got: \`-v ${param}\`.`);
+      cleanupTempFiles();
+      process.exit(1);
+    }
+
+    return [key, val];
+  }
+
+  const variables = [];
+  if (argv.v) {
+    if (typeof argv.v === "string") {
+      variables.push(validateCmdVariable(argv.v));
+    } else {
+      variables.push(...argv.v.map(validateCmdVariable));
+    }
+  }
+  const parsedVariables = Object.fromEntries(variables);
+
+  if (argv.debug) {
+    console.log("Files to be processed:");
+    console.log(paths);
+    console.log("\nVariables from command line:");
+    console.log(parsedVariables);
+    if (tempFilesToCleanup.length > 0) {
+      console.log("\nTemp files (will be deleted after execution):");
+      console.log(tempFilesToCleanup);
+    }
+    cleanupTempFiles();
+    process.exit();
+  }
+
+  paths.forEach(function (env) {
+    dotenv.config({ path: path.resolve(env), override, quiet: isQuiet });
+  });
+
+  // Expand when all path configs are loaded
+  if (argv.expand !== false) {
+    dotenvExpand({
+      parsed: process.env,
+    });
+  }
+  Object.assign(process.env, parsedVariables);
+
+  if (argv.p) {
+    let value = process.env[argv.p];
+    if (typeof value === "string") {
+      value = `${value}`;
+    }
+    console.log(value != null ? value : "");
+    cleanupTempFiles();
+    process.exit();
+  }
+
+  const command = argv._[0];
+  if (!command) {
+    printHelp();
+    cleanupTempFiles();
     process.exit(1);
   }
 
-  return [key, val];
-}
-const variables = [];
-if (argv.v) {
-  if (typeof argv.v === "string") {
-    variables.push(validateCmdVariable(argv.v));
-  } else {
-    variables.push(...argv.v.map(validateCmdVariable));
-  }
-}
-const parsedVariables = Object.fromEntries(variables);
-
-if (argv.debug) {
-  console.log(paths);
-  console.log(parsedVariables);
-  process.exit();
-}
-
-paths.forEach(function (env) {
-  dotenv.config({ path: path.resolve(env), override, quiet: isQuiet });
-});
-
-// Expand when all path configs are loaded
-if (argv.expand !== false) {
-  dotenvExpand({
-    parsed: process.env,
+  const child = spawn(command, argv._.slice(1), { stdio: "inherit" }).on("exit", function (exitCode, signal) {
+    cleanupTempFiles();
+    if (typeof exitCode === "number") {
+      process.exit(exitCode);
+    } else {
+      process.kill(process.pid, signal);
+    }
   });
-}
-Object.assign(process.env, parsedVariables);
 
-if (argv.p) {
-  let value = process.env[argv.p];
-  if (typeof value === "string") {
-    value = `${value}`;
+  for (const signal of ["SIGINT", "SIGTERM", "SIGPIPE", "SIGHUP", "SIGBREAK", "SIGWINCH", "SIGUSR1", "SIGUSR2"]) {
+    process.on(signal, function () {
+      child.kill(signal);
+    });
   }
-  console.log(value != null ? value : "");
-  process.exit();
 }
 
-const command = argv._[0];
-if (!command) {
-  printHelp();
+// Chạy main function
+main().catch((err) => {
+  console.error("Fatal error:", err.message);
+  cleanupTempFiles();
   process.exit(1);
-}
-
-const child = spawn(command, argv._.slice(1), { stdio: "inherit" }).on("exit", function (exitCode, signal) {
-  if (typeof exitCode === "number") {
-    process.exit(exitCode);
-  } else {
-    process.kill(process.pid, signal);
-  }
 });
-
-for (const signal of ["SIGINT", "SIGTERM", "SIGPIPE", "SIGHUP", "SIGBREAK", "SIGWINCH", "SIGUSR1", "SIGUSR2"]) {
-  process.on(signal, function () {
-    child.kill(signal);
-  });
-}
