@@ -1,0 +1,17 @@
+.github/
+.nyc_output/
+coverage/
+examples/
+flow-typed/
+tests/
+types/
+.editorconfig
+.flowconfig
+.npmignore
+.travis.yml
+appveyor.yml
+CONTRIBUTING.md
+dotenv.png
+dotenv.svg
+tea.yaml
+.tap/
