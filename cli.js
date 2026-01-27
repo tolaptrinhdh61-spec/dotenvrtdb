@@ -28,12 +28,47 @@ function printHelp() {
       "  command             `command` is the actual command you want to run. Best practice is to precede this command with ` -- `. Everything after `--` is considered to be your command. So any flags will not be parsed by this tool but be passed to your command. If you do not do it, this tool will strip those flags",
       "",
       "Remote database commands:",
-      "  --pull <url>        pull env variables from remote realtime database URL and save to .env file",
-      "  --pull-output <path> specify output file for pull command (default: .env)",
+      "  --pull <url>        pull env variables from remote realtime database URL and save to file",
+      "                      use with -e flag to specify output file (default: .env)",
+      "                      example: dotenv --pull <url> -e .env.production",
       "  --push <url>        push local .env file to remote realtime database URL",
-      "  --push-source <path> specify source file for push command (default: .env)",
+      "                      use with -e flag to specify source file (default: .env)",
+      "                      example: dotenv --push <url> -e .env.staging",
     ].join("\n"),
   );
+}
+
+// Hàm mask URL để ẩn auth token
+function maskUrl(url) {
+  try {
+    const urlObj = new URL(url);
+
+    // Mask query parameters chứa auth/token/key
+    const params = new URLSearchParams(urlObj.search);
+    const maskedParams = new URLSearchParams();
+
+    for (const [key, value] of params.entries()) {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey.includes("auth") || lowerKey.includes("token") || lowerKey.includes("key") || lowerKey.includes("secret")) {
+        maskedParams.set(key, "******");
+      } else {
+        maskedParams.set(key, value);
+      }
+    }
+
+    urlObj.search = maskedParams.toString();
+
+    // Mask username/password trong URL
+    if (urlObj.username || urlObj.password) {
+      urlObj.username = urlObj.username ? "******" : "";
+      urlObj.password = urlObj.password ? "******" : "";
+    }
+
+    return urlObj.toString();
+  } catch (err) {
+    // Nếu không parse được URL, mask theo pattern
+    return url.replace(/([?&])(auth|token|key|secret|apikey|api_key)=([^&]+)/gi, "$1$2=******").replace(/\/\/([^:]+):([^@]+)@/gi, "//******:******@");
+  }
 }
 
 // Hàm fetch dữ liệu từ URL
@@ -46,7 +81,7 @@ function fetchFromUrl(url) {
         let data = "";
 
         if (res.statusCode !== 200) {
-          reject(new Error(`Failed to fetch from ${url}. Status code: ${res.statusCode}`));
+          reject(new Error(`Failed to fetch from ${maskUrl(url)}. Status code: ${res.statusCode}`));
           return;
         }
 
@@ -59,12 +94,12 @@ function fetchFromUrl(url) {
             const jsonData = JSON.parse(data);
             resolve(jsonData);
           } catch (err) {
-            reject(new Error(`Failed to parse JSON from ${url}: ${err.message}`));
+            reject(new Error(`Failed to parse JSON from ${maskUrl(url)}: ${err.message}`));
           }
         });
       })
       .on("error", (err) => {
-        reject(new Error(`Failed to fetch from ${url}: ${err.message}`));
+        reject(new Error(`Failed to fetch from ${maskUrl(url)}: ${err.message}`));
       });
   });
 }
@@ -99,13 +134,13 @@ function pushToUrl(url, data) {
         if (res.statusCode === 200 || res.statusCode === 201) {
           resolve(responseData);
         } else {
-          reject(new Error(`Failed to push to ${url}. Status code: ${res.statusCode}`));
+          reject(new Error(`Failed to push to ${maskUrl(url)}. Status code: ${res.statusCode}`));
         }
       });
     });
 
     req.on("error", (err) => {
-      reject(new Error(`Failed to push to ${url}: ${err.message}`));
+      reject(new Error(`Failed to push to ${maskUrl(url)}: ${err.message}`));
     });
 
     req.write(jsonData);
@@ -172,7 +207,7 @@ function parseEnvFile(filePath) {
 // Xử lý lệnh pull
 async function handlePull(url, outputPath) {
   try {
-    console.log(`Pulling environment variables from ${url}...`);
+    console.log(`Pulling environment variables from ${maskUrl(url)}...`);
     const data = await fetchFromUrl(url);
     const envContent = objectToEnvFormat(data);
 
@@ -188,7 +223,7 @@ async function handlePull(url, outputPath) {
 // Xử lý lệnh push
 async function handlePush(url, sourcePath) {
   try {
-    console.log(`Pushing environment variables from ${sourcePath} to ${url}...`);
+    console.log(`Pushing environment variables from ${sourcePath} to ${maskUrl(url)}...`);
 
     if (!fs.existsSync(sourcePath)) {
       throw new Error(`Source file ${sourcePath} does not exist`);
@@ -197,7 +232,7 @@ async function handlePush(url, sourcePath) {
     const envData = parseEnvFile(sourcePath);
     await pushToUrl(url, envData);
 
-    console.log(`✓ Successfully pushed environment variables to ${url}`);
+    console.log(`✓ Successfully pushed environment variables to ${maskUrl(url)}`);
     process.exit(0);
   } catch (err) {
     console.error(`✗ Push failed: ${err.message}`);
@@ -210,18 +245,26 @@ if (argv.help) {
   process.exit();
 }
 
-// Xử lý lệnh pull
+// Xử lý lệnh pull - sử dụng -e flag để chỉ định output file
 if (argv.pull) {
   const pullUrl = argv.pull;
-  const outputPath = argv["pull-output"] || ".env";
+  // Nếu có -e flag, dùng file đầu tiên, nếu không dùng .env
+  let outputPath = ".env";
+  if (argv.e) {
+    outputPath = typeof argv.e === "string" ? argv.e : argv.e[0];
+  }
   handlePull(pullUrl, outputPath);
   return;
 }
 
-// Xử lý lệnh push
+// Xử lý lệnh push - sử dụng -e flag để chỉ định source file
 if (argv.push) {
   const pushUrl = argv.push;
-  const sourcePath = argv["push-source"] || ".env";
+  // Nếu có -e flag, dùng file đầu tiên, nếu không dùng .env
+  let sourcePath = ".env";
+  if (argv.e) {
+    sourcePath = typeof argv.e === "string" ? argv.e : argv.e[0];
+  }
   handlePush(pushUrl, sourcePath);
   return;
 }

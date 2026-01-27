@@ -27,7 +27,7 @@ $ pnpm add -g @tolaptrinhdh61-spec/dotenvrtdb
 ### Basic Usage
 
 ```bash
-$ dotenv -- <command with arguments>
+$ dotenvrtdb -- <command with arguments>
 ```
 
 This will load the variables from the .env file in the current working directory and then run the command (using the new set of environment variables).
@@ -35,7 +35,7 @@ This will load the variables from the .env file in the current working directory
 Alternatively, if you do not need to pass arguments to the command, you can use the shorthand:
 
 ```bash
-$ dotenv <command>
+$ dotenvrtdb <command>
 ```
 
 ### 🔥 NEW: Remote Database Sync
@@ -45,13 +45,13 @@ $ dotenv <command>
 Download environment variables from a realtime database (Firebase, custom API, etc.) and save to a local `.env` file:
 
 ```bash
-$ dotenv --pull https://your-project.firebaseio.com/env.json
+$ dotenvrtdb --pull https://your-project.firebaseio.com/env.json
 ```
 
 Specify custom output file:
 
 ```bash
-$ dotenv --pull https://your-project.firebaseio.com/env.json --pull-output .env.production
+$ dotenvrtdb --pull https://your-project.firebaseio.com/env.json --pull-output .env.production
 ```
 
 #### Push environment variables to remote database
@@ -59,26 +59,26 @@ $ dotenv --pull https://your-project.firebaseio.com/env.json --pull-output .env.
 Upload your local `.env` file to a realtime database:
 
 ```bash
-$ dotenv --push https://your-project.firebaseio.com/env.json
+$ dotenvrtdb --push https://your-project.firebaseio.com/env.json
 ```
 
 Specify custom source file:
 
 ```bash
-$ dotenv --push https://your-project.firebaseio.com/env.json --push-source .env.staging
+$ dotenvrtdb --push https://your-project.firebaseio.com/env.json --push-source .env.staging
 ```
 
 **Example workflow:**
 
 ```bash
 # Pull production env from Firebase
-$ dotenv --pull https://myapp.firebaseio.com/env/prod.json --pull-output .env.production
+$ dotenvrtdb --pull https://myapp.firebaseio.com/env/prod.json --pull-output .env.production
 
 # Run your app with production env
-$ dotenv -e .env.production -- node app.js
+$ dotenvrtdb -e .env.production -- node app.js
 
 # Update local env and push back
-$ dotenv --push https://myapp.firebaseio.com/env/prod.json --push-source .env.production
+$ dotenvrtdb --push https://myapp.firebaseio.com/env/prod.json --push-source .env.production
 ```
 
 ### Custom .env files
@@ -86,13 +86,13 @@ $ dotenv --push https://myapp.firebaseio.com/env/prod.json --push-source .env.pr
 Another .env file could be specified using the -e flag (this will replace loading `.env` file):
 
 ```bash
-$ dotenv -e .env2 -- <command with arguments>
+$ dotenvrtdb -e .env2 -- <command with arguments>
 ```
 
 Multiple .env files can be specified, and will be processed in order, but only sets variables if they haven't already been set. So the first one wins (existing env variables win over the first file and the first file wins over the second file):
 
 ```bash
-$ dotenv -e .env3 -e .env4 -- <command with arguments>
+$ dotenvrtdb -e .env3 -e .env4 -- <command with arguments>
 ```
 
 ### Cascading env variables
@@ -114,7 +114,7 @@ See [#37](https://github.com/entropitor/dotenvrtdb/issues/37) for more informati
 The `-c` flag can be used together with the `-e` flag. The following example will cascade env files located one folder up in the directory tree (`../.env` followed by `../.env.local`):
 
 ```bash
-dotenv -e ../.env -c
+dotenvrtdb -e ../.env -c
 ```
 
 ### Setting variable from command line
@@ -122,13 +122,13 @@ dotenv -e ../.env -c
 It is possible to set variable directly from command line using the -v flag:
 
 ```bash
-$ dotenv -v VARIABLE=somevalue -- <command with arguments>
+$ dotenvrtdb -v VARIABLE=somevalue -- <command with arguments>
 ```
 
 Multiple variables can be specified:
 
 ```bash
-$ dotenv -v VARIABLE1=somevalue1 -v VARIABLE2=somevalue2 -- <command with arguments>
+$ dotenvrtdb -v VARIABLE1=somevalue1 -v VARIABLE2=somevalue2 -- <command with arguments>
 ```
 
 Variables set up from command line have higher priority than from env files.
@@ -140,7 +140,7 @@ Variables set up from command line have higher priority than from env files.
 If you want to check the value of an environment variable, use the `-p` flag
 
 ```bash
-$ dotenv -p NODE_ENV
+$ dotenvrtdb -p NODE_ENV
 ```
 
 ### Flags to the underlying command
@@ -156,13 +156,13 @@ mvn exec:java -Dexec.args="-g -f"
 will become the following command with dotenvrtdb:
 
 ```bash
-$ dotenv -- mvn exec:java -Dexec.args="-g -f"
+$ dotenvrtdb -- mvn exec:java -Dexec.args="-g -f"
 ```
 
 or in case the env file is at `.my-env`
 
 ```bash
-$ dotenv -e .my-env -- mvn exec:java -Dexec.args="-g -f"
+$ dotenvrtdb -e .my-env -- mvn exec:java -Dexec.args="-g -f"
 ```
 
 ### Variable expansion
@@ -186,7 +186,7 @@ If your `.env` variables include values that should not be expanded (e.g. `PASSW
 For example:
 
 ```bash
-dotenv --no-expand <command>
+dotenvrtdb --no-expand <command>
 ```
 
 ### Variable expansion in the command
@@ -239,19 +239,19 @@ You can add the `--debug` flag to output the `.env` files that would be processe
 Override any environment variables that have already been set on your machine with values from your .env file.
 
 ```bash
-dotenv -e .env.test -o -- jest
+dotenvrtdb -e .env.test -o -- jest
 ```
 
 ## Command Reference
 
 ```
-Usage: dotenv [--help] [--debug] [--quiet=false] [-e <path>] [-v <name>=<value>]
+Usage: dotenvrtdb [--help] [--debug] [--quiet=false] [-e <path>] [-v <name>=<value>]
               [-p <variable name>] [-c [environment]] [--no-expand] [-- command]
 
 Options:
   --help              print help
   --debug             output the files that would be processed but don't actually parse them
-  --quiet, -q         suppress debug output from dotenv (default: true)
+  --quiet, -q         suppress debug output from dotenvrtdb (default: true)
   -e <path>           parses the file <path> as a `.env` file
   -e <path>           multiple -e flags are allowed
   -v <name>=<value>   put variable <name> into environment using value <value>
@@ -277,10 +277,10 @@ Keep your team's environment variables in sync using Firebase Realtime Database:
 
 ```bash
 # Team lead pushes the base config
-$ dotenv --push https://team-project.firebaseio.com/env/base.json
+$ dotenvrtdb --push https://team-project.firebaseio.com/env/base.json
 
 # Team members pull the config
-$ dotenv --pull https://team-project.firebaseio.com/env/base.json
+$ dotenvrtdb --pull https://team-project.firebaseio.com/env/base.json
 ```
 
 ### Multi-Environment Deployment
@@ -289,13 +289,13 @@ Manage different environments easily:
 
 ```bash
 # Pull production config
-$ dotenv --pull https://myapp.firebaseio.com/prod.json --pull-output .env.production
+$ dotenvrtdb --pull https://myapp.firebaseio.com/prod.json --pull-output .env.production
 
 # Pull staging config
-$ dotenv --pull https://myapp.firebaseio.com/staging.json --pull-output .env.staging
+$ dotenvrtdb --pull https://myapp.firebaseio.com/staging.json --pull-output .env.staging
 
 # Run with specific environment
-$ dotenv -e .env.production -- node server.js
+$ dotenvrtdb -e .env.production -- node server.js
 ```
 
 ### CI/CD Integration
