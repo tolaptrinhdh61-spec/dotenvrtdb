@@ -1,25 +1,41 @@
 {
   "name": "@tolaptrinhdh61-spec/dotenv-cli",
-  "description": "A global executable to run applications with the ENV variables loaded by dotenv, from rtdb url",
   "version": "11.0.0",
-  "author": "entropitor",
+  "description": "A CLI tool to load environment variables from .env files with remote database support",
+  "main": "cli.js",
   "bin": {
     "dotenv": "./cli.js"
   },
-  "dependencies": {
-    "cross-spawn": "^7.0.6",
-    "dotenv": "^17.1.0",
-    "dotenv-expand": "^12.0.0",
-    "minimist": "^1.2.6"
-  },
-  "devDependencies": {
-    "standard": "^16.0.4"
-  },
-  "license": "MIT",
-  "main": "index.js",
-  "repository": "tolaptrinhdh61-spec/dotenvrtdb",
   "scripts": {
-    "lint": "standard"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "resolutions": {}
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tolaptrinhdh61-spec/dotenvrtdb.git"
+  },
+  "keywords": [
+    "dotenv",
+    "env",
+    "environment",
+    "variables",
+    "config",
+    "cli",
+    "firebase",
+    "realtime-database"
+  ],
+  "author": "tolaptrinhdh61-spec",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/tolaptrinhdh61-spec/dotenvrtdb/issues"
+  },
+  "homepage": "https://github.com/tolaptrinhdh61-spec/dotenvrtdb#readme",
+  "dependencies": {
+    "cross-spawn": "^7.0.3",
+    "dotenv": "^16.0.0",
+    "dotenv-expand": "^10.0.0",
+    "minimist": "^1.2.8"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
 }
