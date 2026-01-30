@@ -1,6 +1,6 @@
 {
   "name": "@tolaptrinhdh61-spec/dotenvrtdb",
-  "version": "11.0.6",
+  "version": "11.0.7",
   "description": "A CLI tool to load environment variables from .env files with remote database support",
   "main": "cli.js",
   "bin": {
