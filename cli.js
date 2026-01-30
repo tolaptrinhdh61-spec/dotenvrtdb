@@ -7,7 +7,45 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 
-const argv = require("minimist")(process.argv.slice(2));
+// ✅ FIX: Custom parsing để handle URLs bị split bởi shell
+// Khi URL không có quotes, shell có thể tách nó thành nhiều args
+// VD: -eUrl https://example.com?auth=123&key=456
+// Shell tách thành: ['-eUrl', 'https://example.com?auth=123', 'key=456']
+// Ta cần ghép lại thành: ['-eUrl', 'https://example.com?auth=123&key=456']
+function parseArguments(args) {
+  const result = [];
+  let i = 0;
+
+  while (i < args.length) {
+    const arg = args[i];
+
+    // Nếu là -eUrl, cần xử lý đặc biệt
+    if (arg === "-eUrl" || arg === "--eUrl") {
+      result.push(arg);
+      i++;
+
+      // Ghép tất cả args tiếp theo cho đến khi gặp '--' hoặc arg bắt đầu bằng '-'
+      let urlParts = [];
+      while (i < args.length && args[i] !== "--" && !args[i].startsWith("-")) {
+        urlParts.push(args[i]);
+        i++;
+      }
+
+      // Ghép lại thành 1 URL với '&' (trường hợp shell tách bởi &)
+      if (urlParts.length > 0) {
+        result.push(urlParts.join("&"));
+      }
+    } else {
+      result.push(arg);
+      i++;
+    }
+  }
+
+  return result;
+}
+
+const parsedArgs = parseArguments(process.argv.slice(2));
+const argv = require("minimist")(parsedArgs);
 const dotenv = require("dotenv");
 
 // ✅ FIX: Xử lý import dotenv-expand cho cả CommonJS và ES modules
@@ -516,12 +554,33 @@ async function main() {
 
 // Entry point
 (async function () {
-  // ✅ DEBUG: Log arguments nếu có vấn đề
+  // ✅ DEBUG: Always log raw arguments để diagnose vấn đề
+  const hasEUrl = process.argv.includes("-eUrl") || process.argv.includes("--eUrl");
+  const hasCommand = argv._.length > 0;
+
+  // Nếu có -eUrl nhưng không có command, có thể là parsing issue
+  if (hasEUrl && !hasCommand && !argv.help && !argv.pull && !argv.push && !argv.debug && !argv.p) {
+    console.error("=== ARGUMENT PARSING DEBUG ===");
+    console.error("Raw process.argv:", process.argv);
+    console.error("Parsed args:", parsedArgs);
+    console.error("Minimist result:", JSON.stringify(argv, null, 2));
+    console.error("==============================");
+    console.error("");
+    console.error("ERROR: No command provided after '--'");
+    console.error("Make sure your command follows this pattern:");
+    console.error("  dotenvrtdb -eUrl <url> -- <command>");
+    console.error("");
+    printHelp();
+    process.exit(1);
+  }
+
+  // DEBUG MODE
   const isDebugMode = argv.debug || process.env.DEBUG_DOTENVRTDB === "true";
   if (isDebugMode) {
     console.log("=== DEBUG MODE ===");
-    console.log("Raw argv:", JSON.stringify(argv, null, 2));
-    console.log("process.argv:", process.argv);
+    console.log("Raw process.argv:", process.argv);
+    console.log("Parsed args:", parsedArgs);
+    console.log("Minimist argv:", JSON.stringify(argv, null, 2));
     console.log("==================");
   }
 
