@@ -9,10 +9,11 @@ const os = require("os");
 
 const argv = require("minimist")(process.argv.slice(2));
 const dotenv = require("dotenv");
-const dotenvExpand = require("dotenv-expand").expand;
+const dotenvExpand = require("dotenv-expand");
 
 // Biến lưu danh sách các file tạm cần xóa
 const tempFilesToCleanup = [];
+let isCleanedUp = false; // Prevent double cleanup
 
 function printHelp() {
   console.log(
@@ -46,13 +47,17 @@ function printHelp() {
 
 // Hàm cleanup để xóa các file tạm
 function cleanupTempFiles() {
+  if (isCleanedUp) return;
+  isCleanedUp = true;
+
   const isDebug = argv.debug;
+  const isQuiet = !(argv.quiet === false || argv.q === false || argv.quiet === "false" || argv.q === "false");
 
   tempFilesToCleanup.forEach((filePath) => {
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        if (isDebug || !(argv.quiet === false || argv.q === false || argv.quiet === "false" || argv.q === "false")) {
+        if (isDebug || !isQuiet) {
           console.log(`🗑️  Deleted temp file: ${filePath}`);
         }
       }
@@ -71,6 +76,16 @@ process.on("SIGINT", () => {
 process.on("SIGTERM", () => {
   cleanupTempFiles();
   process.exit(143);
+});
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+  cleanupTempFiles();
+  process.exit(1);
+});
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled rejection:", err);
+  cleanupTempFiles();
+  process.exit(1);
 });
 
 // Hàm mask URL để ẩn auth token
@@ -242,12 +257,14 @@ function parseEnvFile(filePath) {
 // Hàm tạo file tạm từ URL
 async function createTempFileFromUrl(url, index = 0) {
   const isDebug = argv.debug;
+  const isQuiet = !(argv.quiet === false || argv.q === false || argv.quiet === "false" || argv.q === "false");
   const timestamp = Date.now();
-  const tempFileName = `.env.temp.${timestamp}.${index}`;
+  const randomSuffix = Math.random().toString(36).substring(7);
+  const tempFileName = `.env.temp.${timestamp}.${index}.${randomSuffix}`;
   const tempFilePath = path.join(os.tmpdir(), tempFileName);
 
   try {
-    if (isDebug) {
+    if (isDebug || !isQuiet) {
       console.log(`📥 Pulling from ${maskUrl(url)} to temp file: ${tempFilePath}`);
     }
 
@@ -256,7 +273,7 @@ async function createTempFileFromUrl(url, index = 0) {
 
     fs.writeFileSync(tempFilePath, envContent, "utf-8");
 
-    if (isDebug) {
+    if (isDebug || !isQuiet) {
       console.log(`✓ Created temp file: ${tempFilePath}`);
     }
 
@@ -305,47 +322,6 @@ async function handlePush(url, sourcePath) {
   }
 }
 
-if (argv.help) {
-  printHelp();
-  process.exit();
-}
-
-// Xử lý lệnh pull - sử dụng -e flag để chỉ định output file
-if (argv.pull) {
-  const pullUrl = argv.pull;
-  // Nếu có -e flag, dùng file đầu tiên, nếu không dùng .env
-  let outputPath = ".env";
-  if (argv.e) {
-    outputPath = typeof argv.e === "string" ? argv.e : argv.e[0];
-  }
-  handlePull(pullUrl, outputPath);
-  return;
-}
-
-// Xử lý lệnh push - sử dụng -e flag để chỉ định source file
-if (argv.push) {
-  const pushUrl = argv.push;
-  // Nếu có -e flag, dùng file đầu tiên, nếu không dùng .env
-  let sourcePath = ".env";
-  if (argv.e) {
-    sourcePath = typeof argv.e === "string" ? argv.e : argv.e[0];
-  }
-  handlePush(pushUrl, sourcePath);
-  return;
-}
-
-// ===== PHẦN CODE GỐC BÊN DƯỚI VỚI BỔ SUNG -eUrl =====
-
-const override = argv.o || argv.override;
-
-// Handle quiet flag - default is true (quiet), can be disabled with --quiet=false or -q=false
-const isQuiet = !(argv.quiet === false || argv.q === false || argv.quiet === "false" || argv.q === "false");
-
-if (argv.c && override) {
-  console.error("Invalid arguments. Cascading env variables conflicts with overrides.");
-  process.exit(1);
-}
-
 // Xử lý -eUrl: Pull từ URL vào file tạm
 async function processEUrlFlags() {
   if (!argv.eUrl) {
@@ -372,6 +348,16 @@ async function processEUrlFlags() {
 
 // Main async function để xử lý -eUrl
 async function main() {
+  const override = argv.o || argv.override;
+
+  // Handle quiet flag - default is true (quiet), can be disabled with --quiet=false or -q=false
+  const isQuiet = !(argv.quiet === false || argv.q === false || argv.quiet === "false" || argv.q === "false");
+
+  if (argv.c && override) {
+    console.error("Invalid arguments. Cascading env variables conflicts with overrides.");
+    process.exit(1);
+  }
+
   let paths = [];
 
   // Xử lý -eUrl trước
@@ -438,16 +424,17 @@ async function main() {
     process.exit();
   }
 
+  // ✅ FIX: Load và expand từng file một cách đúng đắn
   paths.forEach(function (env) {
-    dotenv.config({ path: path.resolve(env), override, quiet: isQuiet });
+    const result = dotenv.config({ path: path.resolve(env), override, quiet: isQuiet });
+
+    // Expand variables nếu cần (và nếu dotenv.config thành công)
+    if (argv.expand !== false && result.parsed) {
+      dotenvExpand(result);
+    }
   });
 
-  // Expand when all path configs are loaded
-  if (argv.expand !== false) {
-    dotenvExpand({
-      parsed: process.env,
-    });
-  }
+  // Thêm variables từ command line
   Object.assign(process.env, parsedVariables);
 
   if (argv.p) {
@@ -483,9 +470,40 @@ async function main() {
   }
 }
 
-// Chạy main function
-main().catch((err) => {
+// Entry point
+(async function () {
+  if (argv.help) {
+    printHelp();
+    process.exit();
+  }
+
+  // Xử lý lệnh pull - sử dụng -e flag để chỉ định output file
+  if (argv.pull) {
+    const pullUrl = argv.pull;
+    let outputPath = ".env";
+    if (argv.e) {
+      outputPath = typeof argv.e === "string" ? argv.e : argv.e[0];
+    }
+    await handlePull(pullUrl, outputPath);
+    return;
+  }
+
+  // Xử lý lệnh push - sử dụng -e flag để chỉ định source file
+  if (argv.push) {
+    const pushUrl = argv.push;
+    let sourcePath = ".env";
+    if (argv.e) {
+      sourcePath = typeof argv.e === "string" ? argv.e : argv.e[0];
+    }
+    await handlePush(pushUrl, sourcePath);
+    return;
+  }
+
+  // Chạy main function
+  await main();
+})().catch((err) => {
   console.error("Fatal error:", err.message);
+  console.error(err.stack);
   cleanupTempFiles();
   process.exit(1);
 });
