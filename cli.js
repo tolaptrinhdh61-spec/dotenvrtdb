@@ -7,17 +7,36 @@ const http = require("http");
 const fs = require("fs");
 const os = require("os");
 
-// ✅ FIX: Custom parsing để handle URLs bị split bởi shell
-// Khi URL không có quotes, shell có thể tách nó thành nhiều args
-// VD: -eUrl https://example.com?auth=123&key=456
-// Shell tách thành: ['-eUrl', 'https://example.com?auth=123', 'key=456']
-// Ta cần ghép lại thành: ['-eUrl', 'https://example.com?auth=123&key=456']
+// ✅ FIX: Custom parsing để handle URLs bị split bởi shell hoặc masked bởi GitHub Actions
+// Case 1: URL không có quotes, shell tách thành nhiều args
+//   VD: -eUrl https://example.com?auth=123&key=456
+//   Shell tách: ['-eUrl', 'https://example.com?auth=123', 'key=456']
+//   → Ghép lại: ['-eUrl', 'https://example.com?auth=123&key=456']
+//
+// Case 2: GitHub Actions mask secret thành ***, không có quotes
+//   VD: -eUrl *** -- node script.js
+//   GitHub mask trước: ['-eUrl', '***', '--', 'node', 'script.js']
+//   → Giữ nguyên '***' và tìm '--' để tách command
 function parseArguments(args) {
   const result = [];
   let i = 0;
 
+  // Tìm vị trí của '--' trước tiên
+  const doubleDashIndex = args.indexOf("--");
+
   while (i < args.length) {
     const arg = args[i];
+
+    // Nếu gặp '--', dừng parsing flags và pass everything sau đó as command
+    if (arg === "--") {
+      // Không push '--' vào result, nhưng push tất cả args sau nó
+      i++;
+      while (i < args.length) {
+        result.push(args[i]);
+        i++;
+      }
+      break;
+    }
 
     // Nếu là -eUrl, cần xử lý đặc biệt
     if (arg === "-eUrl" || arg === "--eUrl") {
@@ -26,12 +45,21 @@ function parseArguments(args) {
 
       // Ghép tất cả args tiếp theo cho đến khi gặp '--' hoặc arg bắt đầu bằng '-'
       let urlParts = [];
-      while (i < args.length && args[i] !== "--" && !args[i].startsWith("-")) {
-        urlParts.push(args[i]);
+      while (i < args.length && args[i] !== "--") {
+        const nextArg = args[i];
+
+        // Nếu gặp flag khác (bắt đầu với '-' nhưng KHÔNG phải '***' hoặc pattern giống)
+        // thì dừng lại
+        if (nextArg.startsWith("-") && !nextArg.match(/^-[\*\+\.]+$/)) {
+          break;
+        }
+
+        urlParts.push(nextArg);
         i++;
       }
 
       // Ghép lại thành 1 URL với '&' (trường hợp shell tách bởi &)
+      // Hoặc giữ nguyên nếu là masked value như '***'
       if (urlParts.length > 0) {
         result.push(urlParts.join("&"));
       }
@@ -530,6 +558,26 @@ async function main() {
   }
 
   const command = argv._[0];
+
+  // ✅ FIX: Nếu không có command nhưng có -eUrl hợp lệ
+  // GitHub Actions có thể mask secret thành *** khiến parsing bị lỗi
+  // Trong trường hợp này, check xem có remaining args sau khi parse không
+  if (!command && argv.eUrl) {
+    console.error("ERROR: No command provided after arguments.");
+    console.error("When using -eUrl, make sure to include the command to run.");
+    console.error("");
+    console.error("Examples:");
+    console.error('  dotenvrtdb -eUrl "${{ secrets.URL }}" -- node script.js');
+    console.error('  dotenvrtdb -eUrl "https://example.com" -- npm start');
+    console.error("");
+    console.error("Note: In GitHub Actions, always quote secrets to prevent parsing issues:");
+    console.error('  -eUrl "${{ secrets.DOTENVRTDB_URL }}" -- command');
+    console.error("");
+    printHelp();
+    cleanupTempFiles();
+    process.exit(1);
+  }
+
   if (!command) {
     printHelp();
     cleanupTempFiles();
@@ -556,6 +604,7 @@ async function main() {
 (async function () {
   // ✅ DEBUG: Always log raw arguments để diagnose vấn đề
   const hasEUrl = process.argv.includes("-eUrl") || process.argv.includes("--eUrl");
+  const hasDoubleDash = process.argv.includes("--");
   const hasCommand = argv._.length > 0;
 
   // Nếu có -eUrl nhưng không có command, có thể là parsing issue
@@ -564,11 +613,17 @@ async function main() {
     console.error("Raw process.argv:", process.argv);
     console.error("Parsed args:", parsedArgs);
     console.error("Minimist result:", JSON.stringify(argv, null, 2));
+    console.error("Has --:", hasDoubleDash);
     console.error("==============================");
     console.error("");
-    console.error("ERROR: No command provided after '--'");
-    console.error("Make sure your command follows this pattern:");
-    console.error("  dotenvrtdb -eUrl <url> -- <command>");
+    console.error("ERROR: No command provided after arguments");
+    console.error("");
+    console.error("The most common cause is forgetting '--' before the command:");
+    console.error("  ❌ Wrong:   dotenvrtdb -eUrl ${{ secrets.URL }} node script.js");
+    console.error('  ✅ Correct: dotenvrtdb -eUrl "${{ secrets.URL }}" -- node script.js');
+    console.error("");
+    console.error("In GitHub Actions, ALWAYS quote secrets and use '--':");
+    console.error('  run: dotenvrtdb -eUrl "${{ secrets.DOTENVRTDB_URL }}" -- node ./bin/cli.js publish');
     console.error("");
     printHelp();
     process.exit(1);
