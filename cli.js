@@ -9,7 +9,17 @@ const os = require("os");
 
 const argv = require("minimist")(process.argv.slice(2));
 const dotenv = require("dotenv");
-const dotenvExpand = require("dotenv-expand");
+
+// ✅ FIX: Xử lý import dotenv-expand cho cả CommonJS và ES modules
+let dotenvExpand;
+try {
+  // Thử import theo cách mới (dotenv-expand >= 9.0)
+  const dotenvExpandModule = require("dotenv-expand");
+  dotenvExpand = dotenvExpandModule.expand || dotenvExpandModule.default || dotenvExpandModule;
+} catch (err) {
+  console.error("Failed to load dotenv-expand:", err.message);
+  process.exit(1);
+}
 
 // Biến lưu danh sách các file tạm cần xóa
 const tempFilesToCleanup = [];
@@ -324,15 +334,12 @@ async function handlePush(url, sourcePath) {
 
 // Xử lý -eUrl: Pull từ URL vào file tạm
 async function processEUrlFlags() {
-  // ✅ FIX: Kiểm tra kỹ argv.eUrl
   if (!argv.eUrl) {
     return [];
   }
 
-  // ✅ FIX: Lọc bỏ các giá trị rỗng hoặc không hợp lệ
   let urls = typeof argv.eUrl === "string" ? [argv.eUrl] : argv.eUrl;
 
-  // Đảm bảo urls là array và lọc bỏ giá trị rỗng
   if (!Array.isArray(urls)) {
     urls = [urls];
   }
@@ -374,10 +381,9 @@ async function main() {
 
   let paths = [];
 
-  // ✅ FIX: Xử lý -eUrl trước và đảm bảo return về array
+  // Xử lý -eUrl trước
   const tempPaths = await processEUrlFlags();
 
-  // ✅ FIX: Kiểm tra tempPaths là array trước khi spread
   if (Array.isArray(tempPaths) && tempPaths.length > 0) {
     paths.push(...tempPaths);
   }
@@ -442,12 +448,12 @@ async function main() {
     process.exit();
   }
 
-  // ✅ FIX: Load và expand từng file một cách đúng đắn
+  // ✅ FIX: Load và expand từng file với kiểm tra function
   paths.forEach(function (env) {
     const result = dotenv.config({ path: path.resolve(env), override, quiet: isQuiet });
 
-    // Expand variables nếu cần (và nếu dotenv.config thành công)
-    if (argv.expand !== false && result.parsed) {
+    // Expand variables nếu cần và nếu dotenvExpand là function
+    if (argv.expand !== false && result.parsed && typeof dotenvExpand === "function") {
       dotenvExpand(result);
     }
   });
@@ -495,7 +501,7 @@ async function main() {
     process.exit();
   }
 
-  // Xử lý lệnh pull - sử dụng -e flag để chỉ định output file
+  // Xử lý lệnh pull
   if (argv.pull) {
     const pullUrl = argv.pull;
     let outputPath = ".env";
@@ -506,7 +512,7 @@ async function main() {
     return;
   }
 
-  // Xử lý lệnh push - sử dụng -e flag để chỉ định source file
+  // Xử lý lệnh push
   if (argv.push) {
     const pushUrl = argv.push;
     let sourcePath = ".env";
