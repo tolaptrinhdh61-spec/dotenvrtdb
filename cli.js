@@ -271,11 +271,14 @@ async function createTempFileFromUrl(url, index = 0) {
   const timestamp = Date.now();
   const randomSuffix = Math.random().toString(36).substring(7);
   const tempFileName = `.env.temp.${timestamp}.${index}.${randomSuffix}`;
-  const tempFilePath = path.join(os.tmpdir(), tempFileName);
+
+  // ✅ FIX: Tạo temp file trong current working directory thay vì /tmp
+  // Điều này đảm bảo file luôn accessible và có quyền đọc đúng
+  const tempFilePath = path.join(process.cwd(), tempFileName);
 
   try {
     if (isDebug || !isQuiet) {
-      console.log(`📥 Pulling from ${maskUrl(url)} to temp file: ${tempFilePath}`);
+      console.log(`📥 Pulling from ${maskUrl(url)} to temp file: ${tempFileName}`);
     }
 
     const data = await fetchFromUrl(url);
@@ -450,7 +453,24 @@ async function main() {
 
   // ✅ FIX: Load và expand từng file với kiểm tra function
   paths.forEach(function (env) {
-    const result = dotenv.config({ path: path.resolve(env), override, quiet: isQuiet });
+    const resolvedPath = path.resolve(env);
+
+    // Debug: Check if file exists
+    if (!fs.existsSync(resolvedPath)) {
+      if (!isQuiet) {
+        console.warn(`Warning: File does not exist: ${resolvedPath}`);
+      }
+      return; // Skip this file
+    }
+
+    const result = dotenv.config({ path: resolvedPath, override, quiet: isQuiet });
+
+    // Debug: Check if file was loaded successfully
+    if (result.error && !isQuiet) {
+      console.error(`Error loading ${resolvedPath}:`, result.error.message);
+    } else if (result.parsed && !isQuiet) {
+      console.log(`✓ Loaded ${Object.keys(result.parsed).length} variables from ${resolvedPath}`);
+    }
 
     // Expand variables nếu cần và nếu dotenvExpand là function
     if (argv.expand !== false && result.parsed && typeof dotenvExpand === "function") {
@@ -496,6 +516,15 @@ async function main() {
 
 // Entry point
 (async function () {
+  // ✅ DEBUG: Log arguments nếu có vấn đề
+  const isDebugMode = argv.debug || process.env.DEBUG_DOTENVRTDB === "true";
+  if (isDebugMode) {
+    console.log("=== DEBUG MODE ===");
+    console.log("Raw argv:", JSON.stringify(argv, null, 2));
+    console.log("process.argv:", process.argv);
+    console.log("==================");
+  }
+
   if (argv.help) {
     printHelp();
     process.exit();
