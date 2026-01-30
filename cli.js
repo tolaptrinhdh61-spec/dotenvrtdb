@@ -324,11 +324,25 @@ async function handlePush(url, sourcePath) {
 
 // Xử lý -eUrl: Pull từ URL vào file tạm
 async function processEUrlFlags() {
+  // ✅ FIX: Kiểm tra kỹ argv.eUrl
   if (!argv.eUrl) {
     return [];
   }
 
-  const urls = typeof argv.eUrl === "string" ? [argv.eUrl] : argv.eUrl;
+  // ✅ FIX: Lọc bỏ các giá trị rỗng hoặc không hợp lệ
+  let urls = typeof argv.eUrl === "string" ? [argv.eUrl] : argv.eUrl;
+
+  // Đảm bảo urls là array và lọc bỏ giá trị rỗng
+  if (!Array.isArray(urls)) {
+    urls = [urls];
+  }
+
+  urls = urls.filter((url) => url && typeof url === "string" && url.trim().length > 0);
+
+  if (urls.length === 0) {
+    return [];
+  }
+
   const tempPaths = [];
 
   for (let i = 0; i < urls.length; i++) {
@@ -360,15 +374,19 @@ async function main() {
 
   let paths = [];
 
-  // Xử lý -eUrl trước
+  // ✅ FIX: Xử lý -eUrl trước và đảm bảo return về array
   const tempPaths = await processEUrlFlags();
-  paths.push(...tempPaths);
+
+  // ✅ FIX: Kiểm tra tempPaths là array trước khi spread
+  if (Array.isArray(tempPaths) && tempPaths.length > 0) {
+    paths.push(...tempPaths);
+  }
 
   // Sau đó xử lý -e như bình thường
   if (argv.e) {
     if (typeof argv.e === "string") {
       paths.push(argv.e);
-    } else {
+    } else if (Array.isArray(argv.e)) {
       paths.push(...argv.e);
     }
   }
