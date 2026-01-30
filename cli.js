@@ -126,21 +126,47 @@ function cleanupTempFiles() {
   if (isCleanedUp) return;
   isCleanedUp = true;
 
+  if (tempFilesToCleanup.length === 0) {
+    return; // Không có file tạm nào để xóa
+  }
+
   const isDebug = argv.debug;
   const isQuiet = !(argv.quiet === false || argv.q === false || argv.quiet === "false" || argv.q === "false");
+
+  // 🔒 ALWAYS show cleanup message for security awareness
+  if (!isQuiet) {
+    console.log(`\n🧹 Cleaning up ${tempFilesToCleanup.length} temporary file(s)...`);
+  }
+
+  let deletedCount = 0;
+  let failedCount = 0;
 
   tempFilesToCleanup.forEach((filePath) => {
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
+        deletedCount++;
         if (isDebug || !isQuiet) {
-          console.log(`🗑️  Deleted temp file: ${filePath}`);
+          console.log(`   ✓ Deleted: ${path.basename(filePath)}`);
+        }
+      } else {
+        if (isDebug) {
+          console.log(`   ⊘ Already deleted: ${path.basename(filePath)}`);
         }
       }
     } catch (err) {
-      console.error(`⚠️  Failed to delete temp file ${filePath}: ${err.message}`);
+      failedCount++;
+      console.error(`   ✗ Failed to delete ${path.basename(filePath)}: ${err.message}`);
     }
   });
+
+  if (!isQuiet && deletedCount > 0) {
+    console.log(`✓ Successfully deleted ${deletedCount} temporary file(s)\n`);
+  }
+
+  if (failedCount > 0) {
+    console.error(`⚠️  Warning: ${failedCount} file(s) could not be deleted. Please check manually.`);
+  }
 }
 
 // Đăng ký cleanup khi process kết thúc
@@ -338,13 +364,16 @@ async function createTempFileFromUrl(url, index = 0) {
   const randomSuffix = Math.random().toString(36).substring(7);
   const tempFileName = `.env.temp.${timestamp}.${index}.${randomSuffix}`;
 
-  // ✅ FIX: Tạo temp file trong current working directory thay vì /tmp
-  // Điều này đảm bảo file luôn accessible và có quyền đọc đúng
-  const tempFilePath = path.join(process.cwd(), tempFileName);
+  // 🔒 CRITICAL SECURITY FIX: Tạo temp file trong OS temp directory
+  // KHÔNG tạo trong cwd để tránh:
+  // 1. File bị commit vào git
+  // 2. File bị publish lên npm package
+  // 3. Secrets bị leak ra public
+  const tempFilePath = path.join(os.tmpdir(), tempFileName);
 
   try {
     if (isDebug || !isQuiet) {
-      console.log(`📥 Pulling from ${maskUrl(url)} to temp file: ${tempFileName}`);
+      console.log(`📥 Fetching env vars from ${maskUrl(url)}...`);
     }
 
     const data = await fetchFromUrl(url);
@@ -353,7 +382,9 @@ async function createTempFileFromUrl(url, index = 0) {
     fs.writeFileSync(tempFilePath, envContent, "utf-8");
 
     if (isDebug || !isQuiet) {
-      console.log(`✓ Created temp file: ${tempFilePath}`);
+      console.log(`   ✓ Created temp file: ${tempFileName}`);
+      console.log(`   📍 Location: ${os.tmpdir()}`);
+      console.log(`   🔒 Will be auto-deleted after execution`);
     }
 
     // Thêm vào danh sách cần cleanup
