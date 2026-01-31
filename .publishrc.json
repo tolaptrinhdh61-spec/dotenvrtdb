@@ -55,9 +55,10 @@
       "type": "gitea",
       "url": "https://codeberg.org/",
       "owner": "o861runners",
+      "package_name": "@o861runners/dotenvrtdb",
       "token": "{{CODEBERG_TOKEN_O861RUNNERS_NMP}}",
       "access": "public",
-      "enabled": false
+      "enabled": true
     },
     "gitea-dhnpm": {
       "type": "gitea",
