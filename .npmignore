@@ -1,4 +1,7 @@
 # 🔒 CRITICAL: Prevent environment files from being published to npm
+.publishrc.json
+.npm-multi-publish-tmp
+push-env-dotenvrtdb.cmd
 
 # Environment files - ALL patterns
 .env

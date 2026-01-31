@@ -1,0 +1,86 @@
+{
+  "registries": {
+    "npmjs-o861runners-dotenvrtdb": {
+      "type": "npm",
+      "owner": "",
+      "package_name": "@o861runners/dotenvrtdb",
+      "token": "{{NPM_TOKEN_O861RUNNERS}}",
+      "access": "public",
+      "enabled": true,
+      "package_extra": {
+        "repository": {
+          "type": "git",
+          "url": "git+https://github.com/tolaptrinhdh61-spec/dotenvrtdb.git"
+        },
+        "publishConfig": {
+          "registry": "https://registry.npmjs.org/"
+        }
+      }
+    },
+    "npmjs-tolaptrinhdh61-dotenvrtdb": {
+      "type": "npm",
+      "owner": "",
+      "package_name": "@tltdh61/dotenvrtdb",
+      "token": "{{NPM_TOKEN_TOLAPTRINHDH61}}",
+      "access": "public",
+      "enabled": true,
+      "package_extra": {
+        "repository": {
+          "type": "git",
+          "url": "git+https://github.com/tolaptrinhdh61-spec/dotenvrtdb.git"
+        },
+        "publishConfig": {
+          "registry": "https://registry.npmjs.org/"
+        }
+      }
+    },
+    "github-o861runners-gif": {
+      "type": "github",
+      "owner": "o861runners-gif",
+      "repo": "npm-multi-publish",
+      "token": "{{GITHUB_TOKEN_O861RUNNERS_NMP}}",
+      "access": "public",
+      "enabled": false
+    },
+    "codeberg-o861runners": {
+      "type": "gitea",
+      "url": "https://codeberg.org/",
+      "owner": "o861runners",
+      "token": "{{CODEBERG_TOKEN_O861RUNNERS_NMP}}",
+      "access": "public",
+      "enabled": false
+    },
+    "gitea-dhnpm": {
+      "type": "gitea",
+      "url": "https://i.dh-his.com",
+      "owner": "dhnpm",
+      "token": "{{GITEADH_TOKEN_O861RUNNERS_NMP}}",
+      "access": "public",
+      "enabled": false
+    },
+    "npmjs-ohau26-1221-nmp": {
+      "type": "npm",
+      "owner": "",
+      "package_name": "@ohau26-1221/nmp",
+      "token": "{{NPM_TOKEN_OHAU261221}}",
+      "access": "public",
+      "enabled": false
+    },
+    "codeberg-ohau261221": {
+      "type": "gitea",
+      "url": "https://codeberg.org/",
+      "owner": "ohau261221",
+      "token": "{{CODEBERG_TOKEN_OHAU261221_NMP}}",
+      "access": "public",
+      "enabled": false
+    }
+  },
+  "build": {
+    "command": null,
+    "skipBuild": false
+  },
+  "npm": {
+    "defaultArgs": ["--no-git-checks"],
+    "customArgs": []
+  }
+}

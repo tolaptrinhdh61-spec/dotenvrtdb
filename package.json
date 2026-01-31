@@ -7,7 +7,7 @@
     "dotenvrtdb": "./cli.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "publish-o861runners": "dotenv -e .env.dotenvrtdb -- npx --yes @o861runners/nmp publish"
   },
   "repository": {
     "type": "git",
