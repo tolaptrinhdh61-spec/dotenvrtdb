@@ -34,13 +34,22 @@
         }
       }
     },
-    "github-o861runners-gif": {
+    "github-tolaptrinhdh61-spec": {
       "type": "github",
-      "owner": "o861runners-gif",
-      "repo": "npm-multi-publish",
-      "token": "{{GITHUB_TOKEN_O861RUNNERS_NMP}}",
+      "owner": "tolaptrinhdh61-spec",
+      "repo": "dotenvrtdb",
+      "token": "{{GITHUB_TOKEN_TOLAPTRINHDH61}}",
       "access": "public",
-      "enabled": false
+      "enabled": true,
+      "package_extra": {
+        "repository": {
+          "type": "git",
+          "url": "https://github.com/tolaptrinhdh61-spec/dotenvrtdb"
+        },
+        "publishConfig": {
+          "registry": "https://npm.pkg.github.com"
+        }
+      }
     },
     "codeberg-o861runners": {
       "type": "gitea",
