@@ -23,3 +23,20 @@ jobs:
           DOTENVRTDB_URL: ${{ secrets.DOTENVRTDB_URL }}
         run: |
           dotenvrtdb -eUrl "$DOTENVRTDB_URL" -- nmp publish
+
+  publish-github-package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com/
+          scope: "@tolaptrinhdh61-spec"
+      - run: npm i
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.GITHUB_TOKEN}}
