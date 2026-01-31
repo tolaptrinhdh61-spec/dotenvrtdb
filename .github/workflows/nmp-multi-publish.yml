@@ -1,7 +1,7 @@
 name: nmp-multi-publish
 on:
   workflow_dispatch:
-  # push:
+  push:
 permissions:
   id-token: write # Required for OIDC
   contents: read
