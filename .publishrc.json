@@ -27,7 +27,7 @@
       "package_extra": {
         "repository": {
           "type": "git",
-          "url": "git+https://github.com/tolaptrinhdh61-spec/dotenvrtdb.git"
+          "url": "https://github.com/tolaptrinhdh61-spec/dotenvrtdb"
         },
         "publishConfig": {
           "registry": "https://registry.npmjs.org/"
