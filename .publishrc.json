@@ -64,25 +64,19 @@
       "type": "gitea",
       "url": "https://i.dh-his.com",
       "owner": "dhnpm",
+      "package_name": "@dhnpm/dotenvrtdb",
       "token": "{{GITEADH_TOKEN_O861RUNNERS_NMP}}",
       "access": "public",
-      "enabled": false
-    },
-    "npmjs-ohau26-1221-nmp": {
-      "type": "npm",
-      "owner": "",
-      "package_name": "@ohau26-1221/nmp",
-      "token": "{{NPM_TOKEN_OHAU261221}}",
-      "access": "public",
-      "enabled": false
+      "enabled": true
     },
     "codeberg-ohau261221": {
       "type": "gitea",
       "url": "https://codeberg.org/",
       "owner": "ohau261221",
+      "package_name": "@ohau261221/dotenvrtdb",
       "token": "{{CODEBERG_TOKEN_OHAU261221_NMP}}",
       "access": "public",
-      "enabled": false
+      "enabled": true
     }
   },
   "build": {
@@ -90,7 +84,7 @@
     "skipBuild": false
   },
   "npm": {
-    "defaultArgs": ["--no-git-checks"],
+    "defaultArgs_remove": ["--no-git-checks"],
     "customArgs": []
   }
 }
