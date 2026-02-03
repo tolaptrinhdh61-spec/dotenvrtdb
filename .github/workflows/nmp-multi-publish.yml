@@ -22,4 +22,4 @@ jobs:
         env:
           DOTENVRTDB_URL: ${{ secrets.DOTENVRTDB_URL }}
         run: |
-          dotenvrtdb -eUrl "$DOTENVRTDB_URL" -- nmp publish
+          dotenvrtdb --eUrl "$DOTENVRTDB_URL" -- nmp publish
