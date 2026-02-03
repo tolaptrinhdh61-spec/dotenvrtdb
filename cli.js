@@ -15,14 +15,7 @@ const spawn = require("cross-spawn");
 const path = require("path");
 const fs = require("fs");
 
-const argv = require("minimist")(process.argv.slice(2));
-const dotenv = require("dotenv");
-const dotenvExpand = require("dotenv-expand").expand;
-
 const rtdbUtils = (() => {
-  /**
-   * Dùng fetch mặc định của NodeJs để xử lý. Nếu có lỗi thì console.error để báo lỗi, không throw lỗi.
-   */
   let rtdbUrl = ``;
 
   const setUrl = (url = "") => (rtdbUrl = url);
@@ -145,6 +138,25 @@ const rtdbUtils = (() => {
     return lines.join("\n") + (lines.length ? "\n" : "");
   }
 
+  // ✅ Backward-compat: support legacy -eUrl (old systems) by rewriting argv -> --eUrl
+  function normalizeLegacyArgs(rawArgv) {
+    const out = [];
+    for (const a of rawArgv) {
+      // case: -eUrl=https://...
+      if (typeof a === "string" && a.startsWith("-eUrl=")) {
+        out.push("--eUrl=" + a.slice("-eUrl=".length));
+        continue;
+      }
+      // case: -eUrl  https://...
+      if (a === "-eUrl") {
+        out.push("--eUrl");
+        continue;
+      }
+      out.push(a);
+    }
+    return out;
+  }
+
   return {
     setUrl,
     pushTo,
@@ -152,8 +164,13 @@ const rtdbUtils = (() => {
     pullFrom,
     serializeEnv,
     ensureEnvPathProvidedAndExists,
+    normalizeLegacyArgs,
   };
 })();
+
+const argv = require("minimist")(rtdbUtils.normalizeLegacyArgs(process.argv.slice(2)));
+const dotenv = require("dotenv");
+const dotenvExpand = require("dotenv-expand").expand;
 
 function printHelp() {
   console.log(
