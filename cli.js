@@ -138,6 +138,64 @@ const rtdbUtils = (() => {
     return lines.join("\n") + (lines.length ? "\n" : "");
   }
 
+  function readEnvVarFromPath(envPath = "", varName = "") {
+    try {
+      const p = `${envPath || ""}`.trim();
+      const key = `${varName || ""}`.trim();
+
+      if (!p) {
+        console.error(`[env] Missing -e <path>.`);
+        return { ok: false, value: "" };
+      }
+      if (!fs.existsSync(p)) {
+        console.error(`[env] Env file not found: ${p}`);
+        return { ok: false, value: "" };
+      }
+      if (!key) {
+        console.error(`[env] Missing --var=<name>.`);
+        return { ok: false, value: "" };
+      }
+
+      const content = fs.readFileSync(p, "utf8");
+      const parsed = dotenv.parse(content);
+      if (!Object.prototype.hasOwnProperty.call(parsed, key)) {
+        console.error(`[env] Variable not found in env file: ${key}`);
+        return { ok: false, value: "" };
+      }
+      return { ok: true, value: `${parsed[key] ?? ""}` };
+    } catch (err) {
+      console.error(`[env] readEnvVarFromPath error: ${err && err.message ? err.message : err}`);
+      return { ok: false, value: "" };
+    }
+  }
+
+  function decodeBase64ToBuffer(text = "") {
+    try {
+      // Accept standard and URL-safe base64, and ignore whitespace/newlines.
+      const raw = `${text || ""}`.replace(/\s+/g, "");
+      if (!raw) return { ok: true, buffer: Buffer.alloc(0) };
+
+      const normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(normalized)) {
+        return { ok: false, buffer: Buffer.alloc(0) };
+      }
+
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+      const buffer = Buffer.from(padded, "base64");
+
+      // Strict check: ensure input is a valid base64 payload.
+      const expect = padded.replace(/=+$/g, "");
+      const actual = buffer.toString("base64").replace(/=+$/g, "");
+      if (expect !== actual) {
+        return { ok: false, buffer: Buffer.alloc(0) };
+      }
+      return { ok: true, buffer };
+    } catch (err) {
+      console.error(`[env] decodeBase64ToBuffer error: ${err && err.message ? err.message : err}`);
+      return { ok: false, buffer: Buffer.alloc(0) };
+    }
+  }
+
   // ✅ Backward-compat: support legacy -eUrl (old systems) by rewriting argv -> --eUrl
   function normalizeLegacyArgs(rawArgv) {
     const out = [];
@@ -163,6 +221,8 @@ const rtdbUtils = (() => {
     envPathPushTo,
     pullFrom,
     serializeEnv,
+    readEnvVarFromPath,
+    decodeBase64ToBuffer,
     ensureEnvPathProvidedAndExists,
     normalizeLegacyArgs,
   };
@@ -184,6 +244,9 @@ function printHelp() {
       "  --eUrl=<url>        Google Firebase Realtime Database URL (REST). Used to pull/push key=value variables (auto append .json if missing)",
       "  --push              push variables from -e <path> .env file up to --eUrl (requires -e exists, and file exists)",
       "  --pull              pull variables from --eUrl and write back to -e <path> .env file (requires -e exists, and file exists)",
+      "  --writefileraw=<path>    write raw value from --var=<name> in -e <path> env file to <path>",
+      "  --writefilebase64=<path> read --var=<name> from -e <path>, decode base64, then write binary to <path>",
+      "  --var=<name>             env variable name used by --writefileraw/--writefilebase64",
       "  -v <name>=<value>   put variable <name> into environment using value <value>",
       "  -v <name>=<value>   multiple -v flags are allowed",
       "  -p <variable>       print value of <variable> to the console. If you specify this, you do not have to specify a `command`",
@@ -265,10 +328,82 @@ async function main() {
     return true;
   };
 
+  const executeWriteFileRaw = async () => {
+    /**
+     * Nếu tồn tại argv.writefileraw thì đọc --var từ -e <path> và ghi thẳng ra file.
+     */
+    if (!argv.writefileraw) return false;
+
+    const outPath = typeof argv.writefileraw === "string" ? argv.writefileraw.trim() : "";
+    if (!outPath) {
+      console.error(`Missing --writefileraw=<path>.`);
+      return true;
+    }
+    const varName = typeof argv.var === "string" ? argv.var.trim() : "";
+    if (!varName) {
+      console.error(`Missing --var=<name>. This is required for --writefileraw.`);
+      return true;
+    }
+
+    const { ok, envPath } = rtdbUtils.ensureEnvPathProvidedAndExists();
+    if (!ok) return true;
+
+    const envVar = rtdbUtils.readEnvVarFromPath(envPath, varName);
+    if (!envVar.ok) process.exit(1);
+
+    try {
+      fs.writeFileSync(outPath, envVar.value, "utf8");
+    } catch (err) {
+      console.error(`[writefileraw] write error: ${err && err.message ? err.message : err}`);
+      process.exit(1);
+    }
+    return true;
+  };
+
+  const executeWriteFileBase64 = async () => {
+    /**
+     * Nếu tồn tại argv.writefilebase64 thì đọc --var từ -e <path>, decode base64 và ghi ra file.
+     */
+    if (!argv.writefilebase64) return false;
+
+    const outPath = typeof argv.writefilebase64 === "string" ? argv.writefilebase64.trim() : "";
+    if (!outPath) {
+      console.error(`Missing --writefilebase64=<path>.`);
+      return true;
+    }
+    const varName = typeof argv.var === "string" ? argv.var.trim() : "";
+    if (!varName) {
+      console.error(`Missing --var=<name>. This is required for --writefilebase64.`);
+      return true;
+    }
+
+    const { ok, envPath } = rtdbUtils.ensureEnvPathProvidedAndExists();
+    if (!ok) return true;
+
+    const envVar = rtdbUtils.readEnvVarFromPath(envPath, varName);
+    if (!envVar.ok) process.exit(1);
+
+    const decoded = rtdbUtils.decodeBase64ToBuffer(envVar.value);
+    if (!decoded.ok) {
+      console.error(`[writefilebase64] Invalid base64 content in variable: ${varName}`);
+      process.exit(1);
+    }
+
+    try {
+      fs.writeFileSync(outPath, decoded.buffer);
+    } catch (err) {
+      console.error(`[writefilebase64] write error: ${err && err.message ? err.message : err}`);
+      process.exit(1);
+    }
+    return true;
+  };
+
   const didPush = await executePush();
   const didPull = await executePull();
-  if (didPush === true || didPull === true) {
-    // Push/Pull là mode riêng, chạy xong thoát
+  const didWriteFileRaw = await executeWriteFileRaw();
+  const didWriteFileBase64 = await executeWriteFileBase64();
+  if (didPush === true || didPull === true || didWriteFileRaw === true || didWriteFileBase64 === true) {
+    // Push/Pull/WriteFile là mode riêng, chạy xong thoát
     process.exit(0);
   }
 
