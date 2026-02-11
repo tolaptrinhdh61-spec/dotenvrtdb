@@ -215,6 +215,52 @@ const rtdbUtils = (() => {
     return out;
   }
 
+  function getVietnamDateTime(format = "full") {
+    const now = new Date();
+    const vietnamTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" }));
+
+    // Lấy các thành phần ngày giờ
+    const year = vietnamTime.getFullYear();
+    const month = String(vietnamTime.getMonth() + 1).padStart(2, "0");
+    const day = String(vietnamTime.getDate()).padStart(2, "0");
+    const hours = String(vietnamTime.getHours()).padStart(2, "0");
+    const minutes = String(vietnamTime.getMinutes()).padStart(2, "0");
+    const seconds = String(vietnamTime.getSeconds()).padStart(2, "0");
+
+    // Các định dạng có sẵn
+    const formats = {
+      full: `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`,
+      date: `${day}/${month}/${year}`,
+      time: `${hours}:${minutes}:${seconds}`,
+      datetime: `${day}/${month}/${year} ${hours}:${minutes}`,
+      iso: `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`,
+      "iso-date": `${year}-${month}-${day}`,
+      "iso-time": `${hours}:${minutes}:${seconds}`,
+      short: `${day}/${month}/${year} ${hours}:${minutes}`,
+      long: `Ngày ${day} tháng ${month} năm ${year}, ${hours}:${minutes}:${seconds}`,
+      timestamp: vietnamTime.getTime(),
+    };
+
+    // Nếu format là custom pattern, xử lý thay thế
+    if (!formats[format]) {
+      return format
+        .replace("YYYY", year)
+        .replace("YY", String(year).slice(-2))
+        .replace("MM", month)
+        .replace("DD", day)
+        .replace("HH", hours)
+        .replace("mm", minutes)
+        .replace("ss", seconds);
+    }
+
+    return formats[format].toString();
+  }
+  function getDefaultRtdbEnv() {
+    return {
+      DOTENVRTDB_NOW_YYYYDDMMHH: getVietnamDateTime("YYYYMMDDHH"),
+    };
+  }
+
   return {
     setUrl,
     pushTo,
@@ -225,6 +271,8 @@ const rtdbUtils = (() => {
     decodeBase64ToBuffer,
     ensureEnvPathProvidedAndExists,
     normalizeLegacyArgs,
+    getVietnamDateTime,
+    getDefaultRtdbEnv,
   };
 })();
 
@@ -317,7 +365,11 @@ async function main() {
     const { ok, envPath } = rtdbUtils.ensureEnvPathProvidedAndExists();
     if (!ok) return true;
 
-    const objVar = await rtdbUtils.pullFrom();
+    const objVar = {
+      ...rtdbUtils.getDefaultRtdbEnv(),
+      ...(await rtdbUtils.pullFrom()),
+    };
+
     try {
       const out = rtdbUtils.serializeEnv(objVar);
       fs.writeFileSync(envPath, out, "utf8");
@@ -463,7 +515,12 @@ async function main() {
 
   await parseUrlToArgV();
 
-  const parsedVariables = Object.fromEntries(variables);
+  // Merge default env với variables (variables sẽ override default)
+  const defaultEnv = rtdbUtils.getDefaultRtdbEnv() || {};
+  const parsedVariables = {
+    ...defaultEnv,
+    ...Object.fromEntries(variables),
+  };
 
   if (argv.debug) {
     console.log(paths);
