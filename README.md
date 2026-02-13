@@ -227,7 +227,22 @@ you might expect `dotenvrtdb echo "$SAY_HI"` to display `hello!`. In fact, this 
 
 #### Possible solutions
 
-1. Bash and escape
+1. Use `--shell` (cross-env-shell style)
+
+Run the underlying command through a shell so operators (`&&`, `|`, redirection, env expansion) work in the *child* process after env is loaded.
+
+```bash
+# Windows (cmd.exe): use %VAR% for env expansion
+dotenvrtdb -e .env --shell -- "echo %SAY_HI%"
+
+# bash/sh: use $VAR
+dotenvrtdb -e .env --shell -- 'echo "$SAY_HI"'
+
+# inline env (optional)
+dotenvrtdb --shell -- FOO=bar "echo %FOO%"
+```
+
+2. Bash and escape
 
 One possible way to get the desired result is:
 
@@ -239,7 +254,7 @@ In bash, everything between `'` is not interpreted but passed as is. Since `$SAY
 
 Therefore, `dotenvrtdb` will start a child process `bash -c 'echo "$SAY_HI"'` with the env variable `SAY_HI` set correctly which means bash will run `echo "$SAY_HI"` in the right environment which will print correctly `hello`
 
-2. Subscript encapsulation
+3. Subscript encapsulation
 
 Another solution is simply to encapsulate your script in another subscript.
 
@@ -272,7 +287,7 @@ dotenvrtdb -e .env.test -o -- jest
 
 ```
 Usage: dotenvrtdb [--help] [--debug] [--quiet=false] [-e <path>] [-v <n>=<value>]
-                  [-p <variable name>] [-c [environment]] [--no-expand] [-- command]
+                  [-p <variable name>] [-c [environment]] [--no-expand] [--shell[=<shell>]] [-- command]
 
 Options:
   --help              print help
@@ -285,6 +300,7 @@ Options:
   -p <variable>       print value of <variable> to the console
   -c [environment]    support cascading env variables from multiple files
   --no-expand         skip variable expansion
+  --shell[=<shell>]   run the `command` through a shell (cross-env-shell style)
   -o, --override      override system variables. Cannot be used with cascade (-c)
   command             command to run with environment variables loaded
 

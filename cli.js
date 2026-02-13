@@ -283,7 +283,7 @@ const dotenvExpand = require("dotenv-expand").expand;
 function printHelp() {
   console.log(
     [
-      "Usage: dotenv [--help] [--debug] [--quiet=false] [-e <path>] [--eUrl=https://xxx] [--push|--pull] [-v <name>=<value>] [-p <variable name>] [-c [environment]] [--no-expand] [-- command]",
+      "Usage: dotenvrtdb [--help] [--debug] [--quiet=false] [-e <path>] [--eUrl=https://xxx] [--push|--pull] [-v <name>=<value>] [-p <variable name>] [-c [environment]] [--no-expand] [--shell[=<shell>]] [-- command]",
       "  --help              print help",
       "  --debug             output the files that would be processed but don't actually parse them or run the `command`",
       "  --quiet, -q         suppress debug output from dotenv (default: true)",
@@ -292,6 +292,11 @@ function printHelp() {
       "  --eUrl=<url>        Google Firebase Realtime Database URL (REST). Used to pull/push key=value variables (auto append .json if missing)",
       "  --push              push variables from -e <path> .env file up to --eUrl (requires -e exists, and file exists)",
       "  --pull              pull variables from --eUrl and write back to -e <path> .env file (requires -e exists, and file exists)",
+      "  --shell[=<shell>]   run the `command` through a shell (cross-env-shell style).",
+      "                      tip: pass the whole command as ONE quoted string after `--` to preserve quoting/operators.",
+      "                      example (cmd.exe): dotenvrtdb -e .env --shell -- \"echo %API_BASE% && node app.js\"",
+      "                      example (bash):    dotenvrtdb -e .env --shell -- 'echo \"$API_BASE\" && node app.js'",
+      "                      also supports inline env: dotenvrtdb --shell -- FOO=bar \"echo %FOO%\"",
       "  --writefileraw=<path>    write raw value from --var=<name> in -e <path> env file to <path>",
       "  --writefilebase64=<path> read --var=<name> from -e <path>, decode base64, then write binary to <path>",
       "  --var=<name>             env variable name used by --writefileraw/--writefilebase64",
@@ -550,13 +555,62 @@ async function main() {
     process.exit();
   }
 
-  const command = argv._[0];
-  if (!command) {
+  // cross-env-shell style: allow `KEY=VALUE` at the beginning of the command section (after `--`)
+  function parseLeadingEnvAssignments(args = []) {
+    const env = {};
+    let i = 0;
+    for (; i < args.length; i++) {
+      const a = args[i];
+      if (typeof a !== "string") break;
+      const eq = a.indexOf("=");
+      if (eq <= 0) break;
+      const key = a.slice(0, eq);
+      const val = a.slice(eq + 1);
+      // Keep it strict-ish to avoid eating normal args like --foo=bar
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) break;
+      env[key] = val;
+    }
+    return { env, rest: args.slice(i) };
+  }
+
+  const shellOptRaw = argv.shell;
+  let shellOpt = shellOptRaw;
+  if (typeof shellOptRaw === "string") {
+    const t = shellOptRaw.trim().toLowerCase();
+    if (t === "true" || t === "1" || t === "yes") shellOpt = true;
+    else if (t === "false" || t === "0" || t === "no") shellOpt = false;
+    else shellOpt = shellOptRaw.trim();
+  }
+
+  const runInShell = shellOpt === true || (typeof shellOpt === "string" && shellOpt !== "");
+  const { env: inlineEnv, rest: cmdArgs } = runInShell ? parseLeadingEnvAssignments(argv._) : { env: {}, rest: argv._ };
+
+  if (cmdArgs.length === 0) {
     printHelp();
     process.exit(1);
   }
 
-  const child = spawn(command, argv._.slice(1), { stdio: "inherit" }).on("exit", function (exitCode, signal) {
+  const childEnv = Object.keys(inlineEnv).length ? Object.assign({}, process.env, inlineEnv) : process.env;
+
+  const spawnOpts = {
+    stdio: "inherit",
+    env: childEnv,
+  };
+
+  // If --shell is provided:
+  // - boolean true => use platform default shell
+  // - string => pass through to node spawn `shell` option (advanced)
+  let child;
+  if (runInShell) {
+    const shellCommand = cmdArgs.length === 1 ? cmdArgs[0] : cmdArgs.join(" ");
+    const shellVal = typeof shellOpt === "string" ? shellOpt : true;
+    child = spawn(shellCommand, [], Object.assign({}, spawnOpts, { shell: shellVal }));
+  } else {
+    const command = cmdArgs[0];
+    child = spawn(command, cmdArgs.slice(1), spawnOpts);
+  }
+
+  child.on("exit", function (exitCode, signal) {
     if (typeof exitCode === "number") {
       process.exit(exitCode);
     } else {
